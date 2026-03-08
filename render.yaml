@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: freshor-not-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: CORS_ORIGINS
+        value: https://YOUR_NETLIFY_SITE.netlify.app
+      - key: DETECTOR_MODEL_PATH
+        value: /opt/render/project/src/model/detector/stage1_yolov8_best.pt
+      - key: DETECTOR_CLASSES_PATH
+        value: /opt/render/project/src/model/detector/stage1_yolo_classes.json
+      - key: FRESHNESS_MODEL_PATH
+        value: /opt/render/project/src/model/freshness_binary.pt

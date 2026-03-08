@@ -1,0 +1,15 @@
+true_label,apple,banana,bellpepper,bittergourd,capsicum,carrot,cucumber,mango,okra,orange,potato,strawberry,tomato,background
+apple,732,0,0,0,0,0,0,1,0,19,0,0,1,52
+banana,1,531,0,0,0,1,0,0,0,0,0,0,1,8
+bellpepper,5,0,90,0,0,1,2,0,0,1,0,3,15,26
+bittergourd,0,0,1,89,0,0,0,0,0,0,0,1,0,8
+capsicum,1,0,4,0,164,0,0,0,0,1,0,0,1,5
+carrot,0,2,4,0,0,1058,0,1,0,10,6,0,10,41
+cucumber,1,1,11,1,0,6,177,3,25,2,3,7,0,32
+mango,7,2,0,0,0,0,0,311,0,6,1,0,0,27
+okra,0,0,0,0,0,0,5,0,61,0,0,0,0,21
+orange,3,0,0,0,0,2,0,1,0,1117,1,0,1,99
+potato,38,1,2,0,0,13,0,14,0,110,476,0,9,82
+strawberry,0,1,1,0,0,0,0,1,0,0,0,111,0,9
+tomato,27,1,7,0,0,1,0,0,0,11,0,0,1542,54
+background,1,1,2,0,0,0,0,0,0,1,0,0,0,0

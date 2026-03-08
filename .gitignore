@@ -16,6 +16,7 @@ model/*.onnx
 
 # Dataset (local archive — large, do not commit)
 data/
+data_v2/
 archive/
 
 # Kaggle credentials — NEVER commit
@@ -31,3 +32,11 @@ Thumbs.db
 # IDE
 .vscode/settings.json
 .idea/
+
+# Frontend (React/Vite)
+frontend/node_modules/
+frontend/dist/
+
+# Backend (FastAPI)
+backend/.venv/
+backend/__pycache__/

@@ -1,10 +1,13 @@
+# Core app
 streamlit>=1.32.0
 Pillow>=10.0.0
 numpy>=1.24.0
 
-# Deep learning — PyTorch (works on Windows + Python 3.11)
+# Training + inference (PyTorch)
 torch>=2.2.0
 torchvision>=0.17.0
+opencv-python>=4.10.0
+ultralytics>=8.3.0
 
-# Kaggle CLI — needed only to run train.py
-kaggle>=1.6.0
+# Dataset download (Kaggle API)
+kaggle>=2.0.0
