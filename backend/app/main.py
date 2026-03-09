@@ -1,7 +1,9 @@
 import io
 import json
+import logging
 import os
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -91,6 +93,10 @@ PRODUCE_ALIASES = {
 }
 
 FRESHNESS_LABELS = ['fresh', 'stale']
+
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
+LOGGER = logging.getLogger('freshornot.api')
 
 PT_TRANSFORM = T.Compose(
     [
@@ -280,6 +286,9 @@ def _shelf_days(is_fresh: bool, score: float, profile: dict[str, int]) -> int:
 
 @app.post('/api/predict')
 async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
+    request_id = uuid.uuid4().hex[:10]
+    request_start = time.perf_counter()
+
     if DETECTOR_MODEL is None:
         raise HTTPException(status_code=503, detail=f'Detector unavailable: {DETECTOR_ERROR}')
     if FRESHNESS_MODEL is None:
@@ -292,13 +301,30 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
     if not payload:
         raise HTTPException(status_code=400, detail='Received empty file.')
 
+    decode_start = time.perf_counter()
     try:
         image = Image.open(io.BytesIO(payload)).convert('RGB')
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f'Invalid image: {exc}') from exc
+    decode_ms = (time.perf_counter() - decode_start) * 1000.0
 
+    stage1_start = time.perf_counter()
     detection = _detect_produce(image)
+    stage1_ms = (time.perf_counter() - stage1_start) * 1000.0
+
     if detection is None:
+        total_ms = (time.perf_counter() - request_start) * 1000.0
+        LOGGER.info(
+            '[predict:%s] decode_ms=%.1f stage1_detect_ms=%.1f crop_ms=%.1f stage2_classify_ms=%.1f total_ms=%.1f detected=false image_bytes=%d content_type=%s',
+            request_id,
+            decode_ms,
+            stage1_ms,
+            0.0,
+            0.0,
+            total_ms,
+            len(payload),
+            file.content_type,
+        )
         return {
             'label': 'FRESH',
             'confidence': 0.0,
@@ -311,8 +337,14 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
         }
 
     x, y, bw, bh = detection.bbox
+
+    crop_start = time.perf_counter()
     crop = image.crop((x, y, x + bw, y + bh))
+    crop_ms = (time.perf_counter() - crop_start) * 1000.0
+
+    stage2_start = time.perf_counter()
     freshness_label, freshness_conf = _predict_freshness(crop)
+    stage2_ms = (time.perf_counter() - stage2_start) * 1000.0
 
     is_fresh = freshness_label == 'fresh'
     output_label = 'FRESH' if is_fresh else 'STALE'
@@ -320,6 +352,23 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
 
     is_unknown = detection.confidence < DETECTOR_CONF_THRESHOLD or freshness_conf < FRESHNESS_UNKNOWN_THRESHOLD
     profile = PRODUCE_PROFILES.get(detection.produce, {'fresh_max': 8, 'stale_threshold': 3})
+
+    total_ms = (time.perf_counter() - request_start) * 1000.0
+    LOGGER.info(
+        '[predict:%s] decode_ms=%.1f stage1_detect_ms=%.1f crop_ms=%.1f stage2_classify_ms=%.1f total_ms=%.1f detected=true produce=%s det_conf=%.4f freshness_label=%s freshness_conf=%.4f image_bytes=%d content_type=%s',
+        request_id,
+        decode_ms,
+        stage1_ms,
+        crop_ms,
+        stage2_ms,
+        total_ms,
+        detection.produce,
+        detection.confidence,
+        output_label,
+        freshness_conf,
+        len(payload),
+        file.content_type,
+    )
 
     return {
         'label': output_label,
