@@ -295,6 +295,8 @@ Output includes:
 ./scripts/start_stack.sh
 ```
 
+If `backend/.env` exists, `start_stack.sh` auto-loads it before starting FastAPI.
+
 Useful options:
 
 - `./scripts/start_stack.sh --backend-port 8001 --frontend-port 5174`
@@ -307,6 +309,31 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Optional backend env file for local tuning (`backend/.env`, ignored by git):
+
+```bash
+DETECTOR_IMGSZ=640
+MAX_INPUT_SIDE=1024
+DETECTOR_MAX_DET=1
+DETECTOR_CONF_THRESHOLD=0.30
+DETECTOR_FALLBACK_ENABLED=1
+DETECTOR_FALLBACK_CONF_THRESHOLD=0.15
+DETECTOR_FALLBACK_IMGSZ=768
+DETECTOR_FALLBACK_MAX_DET=3
+```
+
+Fallback behavior: if stage 1 returns no detection, the backend retries once on the original image using the fallback settings above.
+
+When running backend manually, load the env file first:
+
+```bash
+cd backend
+set -a
+source .env
+set +a
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 

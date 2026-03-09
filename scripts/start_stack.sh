@@ -59,6 +59,17 @@ ensure_frontend_deps() {
   fi
 }
 
+load_backend_env() {
+  local env_file="${ROOT_DIR}/backend/.env"
+  if [[ -f "${env_file}" ]]; then
+    echo "[setup] Loading backend env vars from backend/.env"
+    set -a
+    # shellcheck disable=SC1090
+    source "${env_file}"
+    set +a
+  fi
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -107,6 +118,7 @@ parse_args "$@"
 require_cmd bash
 ensure_venv
 ensure_frontend_deps
+load_backend_env
 
 trap cleanup EXIT INT TERM
 

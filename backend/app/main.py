@@ -46,6 +46,10 @@ DETECTOR_NMS_THRESHOLD = float(os.getenv('DETECTOR_NMS_THRESHOLD', '0.45'))
 DETECTOR_IMGSZ = int(os.getenv('DETECTOR_IMGSZ', '512'))
 DETECTOR_MAX_DET = int(os.getenv('DETECTOR_MAX_DET', '1'))
 MAX_INPUT_SIDE = int(os.getenv('MAX_INPUT_SIDE', '768'))
+DETECTOR_FALLBACK_ENABLED = os.getenv('DETECTOR_FALLBACK_ENABLED', '1').strip().lower() in {'1', 'true', 'yes', 'on'}
+DETECTOR_FALLBACK_CONF_THRESHOLD = float(os.getenv('DETECTOR_FALLBACK_CONF_THRESHOLD', '0.15'))
+DETECTOR_FALLBACK_IMGSZ = int(os.getenv('DETECTOR_FALLBACK_IMGSZ', '768'))
+DETECTOR_FALLBACK_MAX_DET = int(os.getenv('DETECTOR_FALLBACK_MAX_DET', '3'))
 FRESHNESS_UNKNOWN_THRESHOLD = float(os.getenv('FRESHNESS_UNKNOWN_THRESHOLD', '0.60'))
 
 PRODUCE_PROFILES: dict[str, dict[str, int]] = {
@@ -221,17 +225,27 @@ def health() -> dict[str, Any]:
     }
 
 
-def _detect_produce(pil_img: Image.Image) -> Detection | None:
+def _detect_produce(
+    pil_img: Image.Image,
+    *,
+    conf_threshold: float | None = None,
+    imgsz: int | None = None,
+    max_det: int | None = None,
+) -> Detection | None:
     if DETECTOR_MODEL is None:
         return None
+
+    conf = DETECTOR_CONF_THRESHOLD if conf_threshold is None else conf_threshold
+    infer_imgsz = DETECTOR_IMGSZ if imgsz is None else imgsz
+    infer_max_det = DETECTOR_MAX_DET if max_det is None else max_det
 
     image_np = np.array(pil_img)
     results = cast(Any, DETECTOR_MODEL).predict(
         source=image_np,
-        conf=DETECTOR_CONF_THRESHOLD,
+        conf=conf,
         iou=DETECTOR_NMS_THRESHOLD,
-        imgsz=DETECTOR_IMGSZ,
-        max_det=DETECTOR_MAX_DET,
+        imgsz=infer_imgsz,
+        max_det=infer_max_det,
         verbose=False,
     )
     if not results:
@@ -336,14 +350,34 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
     stage1_start = time.perf_counter()
     detection = _detect_produce(detect_image)
     stage1_ms = (time.perf_counter() - stage1_start) * 1000.0
+    fallback_ms = 0.0
+    fallback_used = False
+
+    if detection is None and DETECTOR_FALLBACK_ENABLED:
+        fallback_used = True
+        fallback_start = time.perf_counter()
+        # Retry once on the original image with relaxed detector settings.
+        detection = _detect_produce(
+            image,
+            conf_threshold=DETECTOR_FALLBACK_CONF_THRESHOLD,
+            imgsz=DETECTOR_FALLBACK_IMGSZ,
+            max_det=DETECTOR_FALLBACK_MAX_DET,
+        )
+        fallback_ms = (time.perf_counter() - fallback_start) * 1000.0
+
+        if detection is not None:
+            # Fallback uses original image coordinates directly.
+            scale_x, scale_y = 1.0, 1.0
 
     if detection is None:
         total_ms = (time.perf_counter() - request_start) * 1000.0
         LOGGER.info(
-            '[predict:%s] decode_ms=%.1f stage1_detect_ms=%.1f crop_ms=%.1f stage2_classify_ms=%.1f total_ms=%.1f detected=false image_bytes=%d content_type=%s det_conf_threshold=%.2f det_imgsz=%d max_det=%d max_input_side=%d',
+            '[predict:%s] decode_ms=%.1f stage1_detect_ms=%.1f stage1_fallback_ms=%.1f fallback_used=%s crop_ms=%.1f stage2_classify_ms=%.1f total_ms=%.1f detected=false image_bytes=%d content_type=%s det_conf_threshold=%.2f det_imgsz=%d max_det=%d max_input_side=%d fallback_conf_threshold=%.2f fallback_imgsz=%d fallback_max_det=%d',
             request_id,
             decode_ms,
             stage1_ms,
+            fallback_ms,
+            fallback_used,
             0.0,
             0.0,
             total_ms,
@@ -353,6 +387,9 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
             DETECTOR_IMGSZ,
             DETECTOR_MAX_DET,
             MAX_INPUT_SIDE,
+            DETECTOR_FALLBACK_CONF_THRESHOLD,
+            DETECTOR_FALLBACK_IMGSZ,
+            DETECTOR_FALLBACK_MAX_DET,
         )
         return {
             'label': 'UNKNOWN',
@@ -396,10 +433,12 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
 
     total_ms = (time.perf_counter() - request_start) * 1000.0
     LOGGER.info(
-        '[predict:%s] decode_ms=%.1f stage1_detect_ms=%.1f crop_ms=%.1f stage2_classify_ms=%.1f total_ms=%.1f detected=true produce=%s det_conf=%.4f freshness_label=%s freshness_conf=%.4f image_bytes=%d content_type=%s det_imgsz=%d max_det=%d max_input_side=%d',
+        '[predict:%s] decode_ms=%.1f stage1_detect_ms=%.1f stage1_fallback_ms=%.1f fallback_used=%s crop_ms=%.1f stage2_classify_ms=%.1f total_ms=%.1f detected=true produce=%s det_conf=%.4f freshness_label=%s freshness_conf=%.4f image_bytes=%d content_type=%s det_imgsz=%d max_det=%d max_input_side=%d fallback_conf_threshold=%.2f fallback_imgsz=%d fallback_max_det=%d',
         request_id,
         decode_ms,
         stage1_ms,
+        fallback_ms,
+        fallback_used,
         crop_ms,
         stage2_ms,
         total_ms,
@@ -412,6 +451,9 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
         DETECTOR_IMGSZ,
         DETECTOR_MAX_DET,
         MAX_INPUT_SIDE,
+        DETECTOR_FALLBACK_CONF_THRESHOLD,
+        DETECTOR_FALLBACK_IMGSZ,
+        DETECTOR_FALLBACK_MAX_DET,
     )
 
     return {

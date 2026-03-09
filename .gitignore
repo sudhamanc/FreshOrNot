@@ -42,3 +42,8 @@ frontend/dist/
 # Backend (FastAPI)
 backend/.venv/
 backend/__pycache__/
+backend/.env
+
+# Local environment files
+.env
+.env.local
