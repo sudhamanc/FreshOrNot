@@ -8,7 +8,7 @@
 
 [[redirects]]
   from = "/api/*"
-  to = "https://YOUR_BACKEND_DOMAIN/:splat"
+  to = "https://freshor-not-backend.onrender.com/api/:splat"
   status = 200
   force = true
 

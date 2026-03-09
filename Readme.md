@@ -206,6 +206,55 @@ These local dataset folders are intentionally pruned from this checkout to keep 
 
 For training, restore raw data into `data/` and regenerate `data_v2/`.
 
+### External Dataset Sources (Kaggle)
+
+The project expects external raw datasets under `data/external/...` using these source mappings:
+
+| Kaggle Dataset | URL | Target Folder |
+| --- | --- | --- |
+| `raghavrpotdar/fresh-and-stale` | `https://www.kaggle.com/datasets/raghavrpotdar/fresh-and-stale` | `data/external/raghavrpotdar_fresh_and_stale` |
+| `muhriddinmuxiddinov/fruits-and-vegetables` | `https://www.kaggle.com/datasets/muhriddinmuxiddinov/fruits-and-vegetables` | `data/external/muhriddinmuxiddinov_fruits_and_vegetables` |
+| `ulnnproject/food-freshness` | `https://www.kaggle.com/datasets/ulnnproject/food-freshness` | `data/external/ulnnproject_food_freshness` |
+| `filipemonteir/fresh-and-rotten` | `https://www.kaggle.com/datasets/filipemonteir/fresh-and-rotten` | `data/external/filipemonteir_fresh_and_rotten` |
+
+If any Kaggle slug changes or is unavailable, pass your own mappings to the script via `--dataset "owner/dataset::target_subdir"`.
+
+### Download Script (Recommended)
+
+1. Install Kaggle CLI (already listed in `requirements.txt`):
+
+```bash
+./.venv/bin/pip install -r requirements.txt
+```
+
+1. Add Kaggle API token:
+
+```bash
+mkdir -p ~/.kaggle
+cp /path/to/kaggle.json ~/.kaggle/kaggle.json
+chmod 600 ~/.kaggle/kaggle.json
+```
+
+1. Download source datasets into `data/external/`:
+
+```bash
+./scripts/download_data.sh
+```
+
+1. Build merged normalized dataset:
+
+```bash
+./.venv/bin/python scripts/prepare_data_v2.py
+```
+
+Custom dataset mapping example:
+
+```bash
+./scripts/download_data.sh \
+  --dataset "owner_a/dataset_a::owner_a_dataset_a" \
+  --dataset "owner_b/dataset_b::owner_b_dataset_b"
+```
+
 Expected for training:
 
 - `data_v2/train/fresh_<produce>/*`
@@ -277,5 +326,4 @@ VITE_API_BASE_URL=http://localhost:8000/api
 
 ## Notes
 
-- This repo no longer uses the legacy single-stage training path.
 - The app expects detector and freshness weights to be pre-trained and present before startup.
