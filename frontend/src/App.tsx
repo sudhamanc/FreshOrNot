@@ -4,7 +4,7 @@ import './App.css'
 import { predictImage, submitFeedback } from './api'
 
 type Prediction = {
-  label: 'FRESH' | 'STALE'
+  label: 'FRESH' | 'STALE' | 'UNKNOWN'
   confidence: number
   shelf_days: number
   fresh_score: number
@@ -28,6 +28,10 @@ function formatPercent(value: number): string {
 }
 
 function actionFromPrediction(result: Prediction): string {
+  if (result.label === 'UNKNOWN') {
+    return 'Retake photo'
+  }
+
   if (result.label === 'STALE') {
     return result.shelf_days <= 0 ? 'Discard now' : 'Use urgently'
   }
@@ -64,7 +68,7 @@ function App() {
   const [isSavingFeedback, setIsSavingFeedback] = useState(false)
   const [history, setHistory] = useState<ScanRecord[]>(() => loadHistory())
 
-  const freshnessTone = result?.label === 'FRESH' ? 'fresh' : 'stale'
+  const freshnessTone = result?.label === 'FRESH' ? 'fresh' : result?.label === 'STALE' ? 'stale' : 'unknown'
   const todaysScans = useMemo(() => {
     const day = new Date().toISOString().slice(0, 10)
     return history.filter((item) => item.at.startsWith(day)).length
@@ -89,7 +93,7 @@ function App() {
       setIsLoading(true)
       const prediction = await predictImage(file)
       setResult(prediction)
-      setFeedbackFreshness(prediction.label === 'FRESH' ? 'fresh' : 'stale')
+      setFeedbackFreshness(prediction.label === 'STALE' ? 'stale' : 'fresh')
       setFeedbackProduce(prediction.produce === 'unknown produce' ? '' : prediction.produce)
       setFeedbackNotes('')
       const record: ScanRecord = {

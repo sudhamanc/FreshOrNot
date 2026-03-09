@@ -340,7 +340,7 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
     if detection is None:
         total_ms = (time.perf_counter() - request_start) * 1000.0
         LOGGER.info(
-            '[predict:%s] decode_ms=%.1f stage1_detect_ms=%.1f crop_ms=%.1f stage2_classify_ms=%.1f total_ms=%.1f detected=false image_bytes=%d content_type=%s',
+            '[predict:%s] decode_ms=%.1f stage1_detect_ms=%.1f crop_ms=%.1f stage2_classify_ms=%.1f total_ms=%.1f detected=false image_bytes=%d content_type=%s det_conf_threshold=%.2f det_imgsz=%d max_det=%d max_input_side=%d',
             request_id,
             decode_ms,
             stage1_ms,
@@ -349,9 +349,13 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
             total_ms,
             len(payload),
             file.content_type,
+            DETECTOR_CONF_THRESHOLD,
+            DETECTOR_IMGSZ,
+            DETECTOR_MAX_DET,
+            MAX_INPUT_SIDE,
         )
         return {
-            'label': 'FRESH',
+            'label': 'UNKNOWN',
             'confidence': 0.0,
             'fresh_score': 0.0,
             'shelf_days': 0,

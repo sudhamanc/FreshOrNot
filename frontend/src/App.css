@@ -86,6 +86,10 @@ h1 {
   color: #bf3c29;
 }
 
+.value.unknown {
+  color: #5c7566;
+}
+
 .drop-zone {
   border-style: dashed;
   display: grid;
@@ -189,6 +193,11 @@ h1 {
 .status-pill.stale {
   background: #ffe2db;
   color: #bf3c29;
+}
+
+.status-pill.unknown {
+  background: #edf2f0;
+  color: #415a4e;
 }
 
 .metric {

@@ -1,5 +1,5 @@
 export type PredictionResponse = {
-  label: 'FRESH' | 'STALE'
+  label: 'FRESH' | 'STALE' | 'UNKNOWN'
   confidence: number
   shelf_days: number
   fresh_score: number
@@ -14,7 +14,7 @@ export type FeedbackRequest = {
   produceName: string
   freshnessLabel: 'fresh' | 'stale'
   notes?: string
-  predictedLabel?: 'FRESH' | 'STALE'
+  predictedLabel?: 'FRESH' | 'STALE' | 'UNKNOWN'
   predictedConfidence?: number
   isUnknown?: boolean
 }
