@@ -13,6 +13,7 @@ model/*.pt
 model/*.h5
 model/*.pth
 model/*.onnx
+!model/freshness_binary.pt
 
 # Dataset (local archive — large, do not commit)
 data/
