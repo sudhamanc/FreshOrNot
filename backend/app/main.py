@@ -43,6 +43,9 @@ FRESHNESS_CLASSES_PATH = Path(os.getenv('FRESHNESS_CLASSES_PATH', str(DEFAULT_FR
 
 DETECTOR_CONF_THRESHOLD = float(os.getenv('DETECTOR_CONF_THRESHOLD', '0.35'))
 DETECTOR_NMS_THRESHOLD = float(os.getenv('DETECTOR_NMS_THRESHOLD', '0.45'))
+DETECTOR_IMGSZ = int(os.getenv('DETECTOR_IMGSZ', '512'))
+DETECTOR_MAX_DET = int(os.getenv('DETECTOR_MAX_DET', '1'))
+MAX_INPUT_SIDE = int(os.getenv('MAX_INPUT_SIDE', '768'))
 FRESHNESS_UNKNOWN_THRESHOLD = float(os.getenv('FRESHNESS_UNKNOWN_THRESHOLD', '0.60'))
 
 PRODUCE_PROFILES: dict[str, dict[str, int]] = {
@@ -227,6 +230,8 @@ def _detect_produce(pil_img: Image.Image) -> Detection | None:
         source=image_np,
         conf=DETECTOR_CONF_THRESHOLD,
         iou=DETECTOR_NMS_THRESHOLD,
+        imgsz=DETECTOR_IMGSZ,
+        max_det=DETECTOR_MAX_DET,
         verbose=False,
     )
     if not results:
@@ -278,6 +283,24 @@ def _predict_freshness(crop: Image.Image) -> tuple[str, float]:
     return label, confidence
 
 
+def _resize_for_detection(image: Image.Image) -> tuple[Image.Image, float, float]:
+    # Resize only when needed to reduce YOLO inference cost on very large inputs.
+    width, height = image.size
+    longest = max(width, height)
+    if longest <= MAX_INPUT_SIDE:
+        return image, 1.0, 1.0
+
+    scale = MAX_INPUT_SIDE / float(longest)
+    new_w = max(1, int(round(width * scale)))
+    new_h = max(1, int(round(height * scale)))
+    resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+    # scale_x/scale_y convert detection coordinates back to the original image.
+    scale_x = width / float(new_w)
+    scale_y = height / float(new_h)
+    return resized, scale_x, scale_y
+
+
 def _shelf_days(is_fresh: bool, score: float, profile: dict[str, int]) -> int:
     if is_fresh:
         return max(0, round(profile['stale_threshold'] + (profile['fresh_max'] - profile['stale_threshold']) * score))
@@ -308,8 +331,10 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=f'Invalid image: {exc}') from exc
     decode_ms = (time.perf_counter() - decode_start) * 1000.0
 
+    detect_image, scale_x, scale_y = _resize_for_detection(image)
+
     stage1_start = time.perf_counter()
-    detection = _detect_produce(image)
+    detection = _detect_produce(detect_image)
     stage1_ms = (time.perf_counter() - stage1_start) * 1000.0
 
     if detection is None:
@@ -336,7 +361,19 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
             'source': 'Two-stage offline: YOLO (.pt) + freshness classifier',
         }
 
-    x, y, bw, bh = detection.bbox
+    x_d, y_d, bw_d, bh_d = detection.bbox
+
+    # Map detector bbox (possibly resized image space) to original image space.
+    x = max(0, int(round(x_d * scale_x)))
+    y = max(0, int(round(y_d * scale_y)))
+    bw = max(1, int(round(bw_d * scale_x)))
+    bh = max(1, int(round(bh_d * scale_y)))
+
+    max_w, max_h = image.size
+    if x + bw > max_w:
+        bw = max(1, max_w - x)
+    if y + bh > max_h:
+        bh = max(1, max_h - y)
 
     crop_start = time.perf_counter()
     crop = image.crop((x, y, x + bw, y + bh))
@@ -355,7 +392,7 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
 
     total_ms = (time.perf_counter() - request_start) * 1000.0
     LOGGER.info(
-        '[predict:%s] decode_ms=%.1f stage1_detect_ms=%.1f crop_ms=%.1f stage2_classify_ms=%.1f total_ms=%.1f detected=true produce=%s det_conf=%.4f freshness_label=%s freshness_conf=%.4f image_bytes=%d content_type=%s',
+        '[predict:%s] decode_ms=%.1f stage1_detect_ms=%.1f crop_ms=%.1f stage2_classify_ms=%.1f total_ms=%.1f detected=true produce=%s det_conf=%.4f freshness_label=%s freshness_conf=%.4f image_bytes=%d content_type=%s det_imgsz=%d max_det=%d max_input_side=%d',
         request_id,
         decode_ms,
         stage1_ms,
@@ -368,6 +405,9 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
         freshness_conf,
         len(payload),
         file.content_type,
+        DETECTOR_IMGSZ,
+        DETECTOR_MAX_DET,
+        MAX_INPUT_SIDE,
     )
 
     return {
