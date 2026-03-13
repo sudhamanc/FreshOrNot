@@ -14,7 +14,7 @@ from typing import cast
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image
+from PIL import Image, ImageOps
 
 try:
     import torch
@@ -239,7 +239,8 @@ def _detect_produce(
     infer_imgsz = DETECTOR_IMGSZ if imgsz is None else imgsz
     infer_max_det = DETECTOR_MAX_DET if max_det is None else max_det
 
-    image_np = np.array(pil_img)
+    # Ultralytics ndarray input follows OpenCV convention (BGR).
+    image_np = np.array(pil_img)[:, :, ::-1]
     results = cast(Any, DETECTOR_MODEL).predict(
         source=image_np,
         conf=conf,
@@ -340,7 +341,7 @@ async def predict(file: UploadFile = File(...)) -> dict[str, Any]:
 
     decode_start = time.perf_counter()
     try:
-        image = Image.open(io.BytesIO(payload)).convert('RGB')
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(payload))).convert('RGB')
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f'Invalid image: {exc}') from exc
     decode_ms = (time.perf_counter() - decode_start) * 1000.0
@@ -508,7 +509,7 @@ async def feedback(
     feedback_raw.mkdir(parents=True, exist_ok=True)
 
     try:
-        image = Image.open(io.BytesIO(payload)).convert('RGB')
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(payload))).convert('RGB')
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f'Invalid image: {exc}') from exc
 
